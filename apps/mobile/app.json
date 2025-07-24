@@ -1,0 +1,85 @@
+{
+  "expo": {
+    "name": "Service Scheduler",
+    "slug": "service-scheduler-mobile",
+    "version": "1.0.0",
+    "sdkVersion": "53.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.servicescheduler.mobile",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app needs location access to track employee locations during jobs.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs location access to track employee locations during jobs.",
+        "NSCameraUsageDescription": "This app needs camera access to take photos during job completion."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      },
+      "package": "com.servicescheduler.mobile",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Service Scheduler to use your location for job tracking."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#3b82f6",
+          "sounds": [
+            "./assets/notification-sound.wav"
+          ]
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you share job completion photos."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Service Scheduler to access your camera for job documentation."
+        }
+      ]
+    ],
+    "scheme": "service-scheduler",
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "your-eas-project-id"
+      }
+    }
+  }
+}

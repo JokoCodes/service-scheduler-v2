@@ -1,0 +1,46 @@
+{
+  "name": "service-scheduler-v2",
+  "version": "1.0.0",
+  "description": "Service business management platform with separated web and mobile services",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:web\" \"npm run dev:mobile-api\"",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:mobile": "npm run start --workspace=apps/mobile",
+    "dev:web-api": "npm run dev --workspace=services/web-api",
+    "dev:mobile-api": "npm run dev --workspace=services/mobile-api",
+    "build": "npm run build --workspaces",
+    "type-check": "npm run type-check --workspaces",
+    "lint": "npm run lint --workspaces",
+    "clean": "npm run clean --workspaces && rm -rf node_modules",
+    "install:all": "npm install && npm install --workspaces",
+    "build:packages": "npm run build --workspace=packages/shared-types --workspace=packages/database --workspace=packages/utils",
+    "dev:packages": "concurrently \"npm run dev --workspace=packages/shared-types\" \"npm run dev --workspace=packages/database\" \"npm run dev --workspace=packages/utils\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "concurrently": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/service-scheduler-v2.git"
+  },
+  "keywords": [
+    "service-management",
+    "scheduling",
+    "react",
+    "react-native",
+    "typescript",
+    "supabase"
+  ]
+}
