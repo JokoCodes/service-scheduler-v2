@@ -130,7 +130,7 @@ export default function HomeScreen() {
   ]
 
   // Messages - empty array means no messages to display
-  const messages = [
+  const messages: Array<{client: string, message: string, time: string, unread: boolean}> = [
     // Uncomment below to show sample message
     // {
     //   client: "Sarah J.",
@@ -229,7 +229,7 @@ export default function HomeScreen() {
           </View>
           {todayJobs.length > 0 ? todayJobs.map((job) => {
             const statusStyles = getStatusStyles(job.status);
-            const isAssigned = job.employee_id !== null;
+            const isAssigned = job.assigned_employee_id !== null;
             return (
               <TouchableOpacity
                 key={job.id}
@@ -249,7 +249,7 @@ export default function HomeScreen() {
                     <Text style={statusStyles.text}>{jobsService.getStatusText(job.status)}</Text>
                   </View>
                 </View>
-                <Text style={styles.jobClient}>Customer: {job.customer_name || 'N/A'}</Text>
+                <Text style={styles.jobClient}>Customer: {job.customer?.full_name || job.customer?.email || 'N/A'}</Text>
                 <View style={styles.jobDetailsRow}>
                   <Feather name="clock" size={14} color="#6b7280" />
                   <Text style={styles.jobDetail}>{jobsService.formatTime(job.scheduled_time)}</Text>

@@ -42,5 +42,8 @@
     "react-native",
     "typescript",
     "supabase"
-  ]
+  ],
+  "dependencies": {
+    "@supabase/supabase-js": "^2.52.1"
+  }
 }

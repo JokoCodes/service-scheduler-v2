@@ -62,14 +62,14 @@ export interface Database {
         Row: {
           id: string
           customer_id: string
-          employee_id: string | null
+          assigned_employee_id: string | null
           company_id: string
           service_name: string
           service_address: string
           scheduled_date: string
           scheduled_time: string
           duration_minutes: number
-          status: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled'
+          status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
           notes: string | null
           created_at: string
           updated_at: string
@@ -82,14 +82,14 @@ export interface Database {
         Insert: {
           id?: string
           customer_id: string
-          employee_id?: string | null
+          assigned_employee_id?: string | null
           company_id: string
           service_name: string
           service_address: string
           scheduled_date: string
           scheduled_time: string
           duration_minutes: number
-          status?: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled'
+          status?: 'pending' | 'confirmed' | 'completed' | 'cancelled'
           notes?: string | null
           created_at?: string
           updated_at?: string
@@ -101,14 +101,14 @@ export interface Database {
         Update: {
           id?: string
           customer_id?: string
-          employee_id?: string | null
+          assigned_employee_id?: string | null
           company_id?: string
           service_name?: string
           service_address?: string
           scheduled_date?: string
           scheduled_time?: string
           duration_minutes?: number
-          status?: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled'
+          status?: 'pending' | 'confirmed' | 'completed' | 'cancelled'
           notes?: string | null
           created_at?: string
           updated_at?: string
@@ -247,7 +247,7 @@ export interface Database {
     }
     Enums: {
       user_role: 'admin' | 'employee' | 'customer'
-      booking_status: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled'
+      booking_status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
       payment_status: 'unpaid' | 'pending' | 'paid' | 'failed' | 'refunded'
       stripe_payment_status: 'pending' | 'processing' | 'succeeded' | 'failed' | 'canceled' | 'refunded'
       payout_preference: 'standard' | 'instant'

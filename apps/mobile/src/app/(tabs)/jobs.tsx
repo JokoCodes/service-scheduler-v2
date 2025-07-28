@@ -72,103 +72,26 @@ export default function JobsScreen() {
     setRefreshing(false)
   }
 
-  // Sample data for different tabs
-  const availableJobs: Job[] = [
-    {
-      id: '1',
-      customerName: 'Sarah Johnson',
-      serviceName: 'House Cleaning',
-      scheduledTime: '14:00',
-      serviceAddress: '123 Main St, Downtown',
-      servicePrice: 85,
-      status: 'available',
-      scheduledDate: '2024-01-16',
-      description: 'Deep cleaning of 3-bedroom house'
-    },
-    {
-      id: '2',
-      customerName: 'Mike Davis',
-      serviceName: 'Garden Maintenance',
-      scheduledTime: '17:00',
-      serviceAddress: '456 Oak Ave, Suburbs',
-      servicePrice: 60,
-      status: 'available',
-      scheduledDate: '2024-01-16',
-      description: 'Lawn mowing and hedge trimming'
-    },
-    {
-      id: '3',
-      customerName: 'Lisa Wong',
-      serviceName: 'Window Cleaning',
-      scheduledTime: '09:00',
-      serviceAddress: '321 Elm St, Downtown',
-      servicePrice: 45,
-      status: 'available',
-      scheduledDate: '2024-01-17',
-      description: 'Clean all exterior windows'
-    },
-  ]
-
-  const assignedJobs: Job[] = [
-    {
-      id: '4',
-      customerName: 'Emily Chen',
-      serviceName: 'Pool Cleaning',
-      scheduledTime: '10:00',
-      serviceAddress: '789 Pine Rd, Westside',
-      servicePrice: 120,
-      status: 'assigned',
-      scheduledDate: '2024-01-15',
-      description: 'Weekly pool maintenance and chemical balancing'
-    },
-    {
-      id: '5',
-      customerName: 'Robert Taylor',
-      serviceName: 'Carpet Cleaning',
-      scheduledTime: '13:00',
-      serviceAddress: '654 Maple Ave, Eastside',
-      servicePrice: 95,
-      status: 'assigned',
-      scheduledDate: '2024-01-15',
-      description: 'Steam clean living room and bedroom carpets'
-    },
-  ]
-
-  const completedJobs: Job[] = [
-    {
-      id: '6',
-      customerName: 'David Wilson',
-      serviceName: 'Plumbing Repair',
-      scheduledTime: '08:00',
-      serviceAddress: '987 Cedar St, Northside',
-      servicePrice: 150,
-      status: 'completed',
-      scheduledDate: '2024-01-14',
-      description: 'Fix leaky kitchen faucet'
-    },
-    {
-      id: '7',
-      customerName: 'Anna Rodriguez',
-      serviceName: 'House Cleaning',
-      scheduledTime: '11:00',
-      serviceAddress: '159 Birch Ln, Southside',
-      servicePrice: 75,
-      status: 'completed',
-      scheduledDate: '2024-01-13',
-      description: 'Standard house cleaning service'
-    },
-    {
-      id: '8',
-      customerName: 'Mark Thompson',
-      serviceName: 'Electrical Work',
-      scheduledTime: '15:00',
-      serviceAddress: '753 Spruce Dr, Westside',
-      servicePrice: 200,
-      status: 'completed',
-      scheduledDate: '2024-01-12',
-      description: 'Install ceiling fan in master bedroom'
-    },
-  ]
+  // Helper function to get display title and subtitle
+  const getJobDisplayInfo = (job: JobWithPayment) => {
+    if (job.customer?.full_name) {
+      return {
+        title: job.customer.full_name,
+        subtitle: job.service_name
+      }
+    }
+    if (job.customer?.email) {
+      return {
+        title: job.customer.email,
+        subtitle: job.service_name
+      }
+    }
+    // Fallback to service name as title when no customer data
+    return {
+      title: job.service_name || 'Service Job',
+      subtitle: `Job #${job.id.substring(0, 8)}`
+    }
+  }
 
   const getCurrentJobs = (): JobWithPayment[] => {
     if (!jobsData) return []
@@ -189,7 +112,7 @@ export default function JobsScreen() {
     if (!currentUser) return
 
     try {
-      if (job.employee_id === null) {
+      if (job.assigned_employee_id === null) {
         // This is an available job - assign it to the current user
         Alert.alert(
           'Pick Up Job',
@@ -235,16 +158,19 @@ export default function JobsScreen() {
     }
   }
 
-  const renderJobItem = ({ item }: { item: JobWithPayment }) => (
-    <TouchableOpacity
-      style={styles.jobCard}
-      onPress={() => router.push(`/job-details/${item.id}?status=${item.status}&tab=${activeTab}`)}
-    >
-      <View style={styles.jobHeader}>
-        <View style={styles.jobInfo}>
-          <Text style={styles.customerName}>Customer</Text>
-          <Text style={styles.serviceName}>{item.service_name}</Text>
-        </View>
+  const renderJobItem = ({ item }: { item: JobWithPayment }) => {
+    const displayInfo = getJobDisplayInfo(item)
+    
+    return (
+      <TouchableOpacity
+        style={styles.jobCard}
+        onPress={() => router.push(`/job-details/${item.id}?status=${item.status}&tab=${activeTab}`)}
+      >
+        <View style={styles.jobHeader}>
+          <View style={styles.jobInfo}>
+            <Text style={styles.customerName}>{displayInfo.title}</Text>
+            <Text style={styles.serviceName}>{displayInfo.subtitle}</Text>
+          </View>
         <View style={[styles.statusBadge, { backgroundColor: jobsService.getStatusColor(item.status) }]}>
           <Text style={styles.statusText}>{jobsService.getStatusText(item.status)}</Text>
         </View>
@@ -278,7 +204,7 @@ export default function JobsScreen() {
       </View>
 
       <View style={styles.jobActions}>
-        {item.employee_id === null ? (
+        {item.assigned_employee_id === null ? (
           <TouchableOpacity
             style={[styles.actionButton, styles.primaryButton]}
             onPress={() => handleJobAction(item)}
@@ -298,6 +224,7 @@ export default function JobsScreen() {
       </View>
     </TouchableOpacity>
   )
+  }
 
   if (loading) {
     return (
@@ -522,5 +449,16 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: '#ffffff',
     fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6b7280',
+    marginTop: 16,
   },
 })

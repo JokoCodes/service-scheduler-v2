@@ -5,6 +5,12 @@ export type Payment = Tables<'payments'>
 
 export interface JobWithPayment extends Booking {
   payments?: Payment[]
+  customer?: {
+    id: string
+    full_name: string | null
+    email: string
+    phone: string | null
+  }
 }
 
 export interface JobsData {
@@ -14,70 +20,149 @@ export interface JobsData {
 }
 
 class JobsService {
-  async getJobsForEmployee(employeeId: string): Promise<JobsData> {
+  // Helper function to get employee ID from profile ID
+  private async getEmployeeIdFromProfile(profileId: string): Promise<string | null> {
     try {
+      console.log('🔍 [JobsService] Looking up employee ID for profile:', profileId)
+      
+      const { data: employee, error } = await supabase
+        .from('employees')
+        .select('id')
+        .eq('profile_id', profileId)
+        .single()
+      
+      if (error) {
+        console.error('❌ [JobsService] Error finding employee:', error)
+        return null
+      }
+      
+      console.log('✅ [JobsService] Found employee ID:', employee.id)
+      return employee.id
+    } catch (error) {
+      console.error('❌ [JobsService] Error in getEmployeeIdFromProfile:', error)
+      return null
+    }
+  }
+
+  async getJobsForEmployee(profileId: string): Promise<JobsData> {
+    try {
+      console.log('🔍 [JobsService] Fetching jobs for profile:', profileId)
+      
+      // Convert profile ID to employee ID for querying assigned jobs
+      const employeeId = await this.getEmployeeIdFromProfile(profileId)
+      if (!employeeId) {
+        console.warn('⚠️ [JobsService] Employee record not found, returning only available jobs')
+      }
+      
       // Get available jobs (not assigned to anyone)
       const { data: availableJobs, error: availableError } = await supabase
         .from('bookings')
-        .select('*, payments(*)')
-        .is('employee_id', null)
-        .eq('status', 'confirmed')
+        .select(`
+          *,
+          payments(*)
+        `)
+        .is('assigned_employee_id', null)
+        .in('status', ['pending', 'confirmed'])
+        .gte('scheduled_date', new Date().toISOString().split('T')[0]) // Only future jobs
         .order('scheduled_date', { ascending: true })
 
       if (availableError) {
+        console.error('❌ [JobsService] Error fetching available jobs:', availableError)
         throw new Error(`Failed to fetch available jobs: ${availableError.message}`)
       }
 
-      // Get assigned jobs for this employee
-      const { data: assignedJobs, error: assignedError } = await supabase
-        .from('bookings')
-        .select('*, payments(*)')
-        .eq('employee_id', employeeId)
-        .in('status', ['confirmed', 'in_progress'])
-        .order('scheduled_date', { ascending: true })
+      console.log('✅ [JobsService] Available jobs found:', availableJobs?.length || 0)
 
-      if (assignedError) {
-        throw new Error(`Failed to fetch assigned jobs: ${assignedError.message}`)
+      let assignedJobs: JobWithPayment[] = []
+      let completedJobs: JobWithPayment[] = []
+      
+      if (employeeId) {
+        // Get assigned jobs for this employee
+        const { data: assigned, error: assignedError } = await supabase
+          .from('bookings')
+          .select(`
+            *,
+            payments(*)
+          `)
+          .eq('assigned_employee_id', employeeId)
+          .in('status', ['confirmed'])
+          .order('scheduled_date', { ascending: true })
+
+        if (assignedError) {
+          console.error('❌ [JobsService] Error fetching assigned jobs:', assignedError)
+          throw new Error(`Failed to fetch assigned jobs: ${assignedError.message}`)
+        }
+
+        assignedJobs = assigned || []
+        console.log('✅ [JobsService] Assigned jobs found:', assignedJobs.length)
+
+        // Get completed jobs for this employee
+        const { data: completed, error: completedError } = await supabase
+          .from('bookings')
+          .select(`
+            *,
+            payments(*)
+          `)
+          .eq('assigned_employee_id', employeeId)
+          .eq('status', 'completed')
+          .order('scheduled_date', { ascending: false })
+          .limit(20) // Limit to recent completed jobs
+
+        if (completedError) {
+          console.error('❌ [JobsService] Error fetching completed jobs:', completedError)
+          throw new Error(`Failed to fetch completed jobs: ${completedError.message}`)
+        }
+
+        completedJobs = completed || []
+        console.log('✅ [JobsService] Completed jobs found:', completedJobs.length)
       }
 
-      // Get completed jobs for this employee
-      const { data: completedJobs, error: completedError } = await supabase
-        .from('bookings')
-        .select('*, payments(*)')
-        .eq('employee_id', employeeId)
-        .eq('status', 'completed')
-        .order('scheduled_date', { ascending: false })
-        .limit(20) // Limit to recent completed jobs
-
-      if (completedError) {
-        throw new Error(`Failed to fetch completed jobs: ${completedError.message}`)
-      }
-
-      return {
+      const result = {
         available: availableJobs || [],
         assigned: assignedJobs || [],
         completed: completedJobs || [],
       }
+
+      console.log('📊 [JobsService] Final job counts:', {
+        available: result.available.length,
+        assigned: result.assigned.length,
+        completed: result.completed.length
+      })
+
+      return result
     } catch (error) {
-      console.error('Error fetching jobs:', error)
+      console.error('❌ [JobsService] Error fetching jobs:', error)
       throw error
     }
   }
 
-  async assignJobToEmployee(bookingId: string, employeeId: string): Promise<void> {
+  async assignJobToEmployee(bookingId: string, profileId: string): Promise<void> {
     try {
+      console.log('📝 [JobsService] Assigning job:', { bookingId, profileId })
+      
+      // Convert profile ID to employee ID
+      const employeeId = await this.getEmployeeIdFromProfile(profileId)
+      if (!employeeId) {
+        throw new Error('Employee record not found for this profile')
+      }
+      
+      console.log('🎯 [JobsService] Using employee ID for assignment:', employeeId)
+      
       const { error } = await supabase
         .from('bookings')
         .update({
-          employee_id: employeeId,
+          assigned_employee_id: employeeId,
           status: 'confirmed',
           updated_at: new Date().toISOString(),
         })
         .eq('id', bookingId)
 
       if (error) {
+        console.error('❌ [JobsService] Assignment failed:', error)
         throw new Error(`Failed to assign job: ${error.message}`)
       }
+      
+      console.log('✅ [JobsService] Job assigned successfully')
     } catch (error) {
       console.error('Error assigning job:', error)
       throw error
@@ -86,10 +171,11 @@ class JobsService {
 
   async startJob(bookingId: string): Promise<void> {
     try {
+      // Since 'in_progress' is not supported, we'll keep it as 'confirmed'
+      // This method can be used for other job start logic if needed
       const { error } = await supabase
         .from('bookings')
         .update({
-          status: 'in_progress',
           updated_at: new Date().toISOString(),
         })
         .eq('id', bookingId)
@@ -125,19 +211,48 @@ class JobsService {
 
   async getJobById(bookingId: string): Promise<JobWithPayment | null> {
     try {
+      console.log('🔍 [JobsService.getJobById] Starting query for ID:', bookingId)
+      console.log('🔍 [JobsService.getJobById] Making Supabase query...')
+      
       const { data, error } = await supabase
         .from('bookings')
         .select('*, payments(*)')
         .eq('id', bookingId)
         .single()
 
+      console.log('🔍 [JobsService.getJobById] Supabase query completed')
+      console.log('🔍 [JobsService.getJobById] Error:', error)
+      console.log('🔍 [JobsService.getJobById] Data received:', data ? 'yes' : 'no')
+      
       if (error) {
+        console.error('❌ [JobsService.getJobById] Supabase error:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
         throw new Error(`Failed to fetch job: ${error.message}`)
+      }
+
+      if (data) {
+        console.log('✅ [JobsService.getJobById] Job found:', {
+          id: data.id,
+          service_name: data.service_name,
+          customer_name: data.customer_name,
+          service_address: data.service_address,
+          scheduled_date: data.scheduled_date,
+          scheduled_time: data.scheduled_time,
+          status: data.status
+        })
+      } else {
+        console.warn('⚠️ [JobsService.getJobById] No data returned from query')
       }
 
       return data
     } catch (error) {
-      console.error('Error fetching job by ID:', error)
+      console.error('❌ [JobsService.getJobById] Unexpected error:', error)
+      console.error('❌ [JobsService.getJobById] Error type:', typeof error)
+      console.error('❌ [JobsService.getJobById] Error details:', error.message || 'No message')
       throw error
     }
   }
@@ -172,8 +287,6 @@ class JobsService {
         return '#f59e0b'
       case 'confirmed':
         return '#3b82f6'
-      case 'in_progress':
-        return '#8b5cf6'
       case 'completed':
         return '#10b981'
       case 'cancelled':
@@ -189,8 +302,6 @@ class JobsService {
         return 'Pending'
       case 'confirmed':
         return 'Confirmed'
-      case 'in_progress':
-        return 'In Progress'
       case 'completed':
         return 'Completed'
       case 'cancelled':

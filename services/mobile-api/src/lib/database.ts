@@ -66,35 +66,58 @@ export const getMobileEmployeeProfile = async (employeeId: string) => {
   return data
 }
 
-// Get employee's active jobs (mobile-optimized)
-export const getEmployeeActiveJobs = async (employeeId: string, limit: number = 20) => {
-  const { data, error } = await supabase
-    .from('bookings')
+// Get employee's active jobs (mobile-optimized using new assignment system)
+export const getEmployeeActiveJobs = async (profileId: string, limit: number = 20) => {
+  const adminClient = getAdminClient()
+  
+  const { data, error } = await adminClient
+    .from('booking_staff_assignments')
     .select(`
       id,
-      scheduled_date,
-      scheduled_time,
+      booking_id,
+      employee_id,
+      role,
       status,
-      service_address,
+      assigned_at,
+      accepted_at,
       notes,
-      customers:customer_id (
-        name,
-        phone
-      ),
-      services:service_id (
-        name,
-        duration,
-        price
+      bookings!inner (
+        id,
+        scheduled_date,
+        scheduled_time,
+        status,
+        service_address,
+        notes,
+        customers:customer_id (
+          name,
+          phone
+        ),
+        services:service_id (
+          name,
+          duration,
+          price
+        )
       )
     `)
-    .eq('assigned_employee_id', employeeId)
-    .in('status', ['confirmed', 'in-progress'])
-    .order('scheduled_date', { ascending: true })
-    .order('scheduled_time', { ascending: true })
+    .eq('employee_id', profileId) // Use profile_id directly
+    .in('status', ['assigned', 'accepted']) // Active assignments
+    .in('bookings.status', ['confirmed', 'in_progress']) // Active booking statuses
+    .order('assigned_at', { ascending: true })
     .limit(limit)
   
   if (error) throw error
-  return data
+  
+  // Transform the data to match the expected format
+  return (data || []).map(assignment => ({
+    ...assignment.bookings,
+    // Add assignment metadata
+    assignment_id: assignment.id,
+    assignment_status: assignment.status,
+    assignment_role: assignment.role,
+    assigned_at: assignment.assigned_at,
+    accepted_at: assignment.accepted_at,
+    assignment_notes: assignment.notes
+  }))
 }
 
 // Update job status (mobile-optimized)

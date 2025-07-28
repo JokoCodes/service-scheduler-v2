@@ -59,6 +59,9 @@ export async function PUT(
     }
 
     const adminClient = getAdminClient()
+    
+    // Start a transaction-like operation
+    // First, update the staff assignment
     const { data: updatedAssignment, error: updateError } = await adminClient
       .from('booking_staff_assignments')
       .update(updateData)
@@ -83,6 +86,26 @@ export async function PUT(
         { status: 500 }
       )
     }
+
+    // If status is accepted, update the bookings table
+    // Note: The database triggers will automatically update staff_fulfilled count
+    // but we still need to handle any additional business logic
+    if (body.status === 'accepted') {
+      // Get current booking info to validate the update
+      const { data: booking, error: bookingError } = await adminClient
+        .from('bookings')
+        .select('id, staff_required, staff_fulfilled')
+        .eq('id', params.id)
+        .single()
+
+      if (bookingError) {
+        console.error('Booking fetch error after assignment update:', bookingError)
+        // Note: Assignment was already updated, this is just for validation
+      } else {
+        console.log(`Booking ${params.id} staffing updated: ${booking.staff_fulfilled}/${booking.staff_required} staff`)
+      }
+    }
+
 
     // Create notification for admin when employee responds
     if (body.status === 'accepted' || body.status === 'declined') {

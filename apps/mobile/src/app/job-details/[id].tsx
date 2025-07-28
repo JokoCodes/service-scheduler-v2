@@ -8,10 +8,12 @@ import {
   Dimensions,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams, router } from 'expo-router'
+import { jobsService, JobWithPayment } from '../../lib/services/jobsService'
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window')
 const isTablet = screenWidth >= 768
@@ -42,40 +44,190 @@ interface JobDetails {
 type TabType = 'details' | 'chat'
 
 export default function JobDetailsScreen() {
+  console.log('🚀 [JobDetails] Component mounting/re-rendering')
+  
   const { id, status, tab } = useLocalSearchParams()
+  console.log('📝 [JobDetails] Route params:', { id, status, tab })
+  
   const [activeTab, setActiveTab] = useState<TabType>('details')
   const [jobStatus, setJobStatus] = useState<JobDetails['status']>(status as JobDetails['status'] || 'available')
   const [timerStartTime, setTimerStartTime] = useState<Date | null>(null)
   const [elapsedTime, setElapsedTime] = useState(0) // in seconds
+  const [loading, setLoading] = useState(true)
+  const [jobData, setJobData] = useState<JobWithPayment | null>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  
+  console.log('🎯 [JobDetails] Current state:', { loading, jobData: !!jobData, jobStatus })
+  
+  // Load job data from database - MOVED TO TOP
+  useEffect(() => {
+    console.log('🔄 [JobDetails] useEffect triggered - START')
+    console.log('🔄 [JobDetails] useEffect - id value:', id)
+    console.log('🔄 [JobDetails] useEffect - id type:', typeof id)
+    console.log('🔄 [JobDetails] useEffect - id truthy check:', !!id)
+    
+    const fetchJobData = async () => {
+      if (!id) {
+        console.warn('⚠️ [JobDetails] No ID provided in useEffect')
+        return
+      }
+      
+      try {
+        console.log('🔄 [JobDetails] Starting job fetch for ID:', id)
+        setLoading(true)
+        
+        const job = await jobsService.getJobById(id as string)
+        console.log('🔄 [JobDetails] Job fetch result:', job ? 'success' : 'null')
+        
+        if (job) {
+          console.log('✅ [JobDetails] Setting job data and status')
+          setJobData(job)
+          setJobStatus(job.status as JobDetails['status'])
+        } else {
+          console.warn('⚠️ [JobDetails] Job not found')
+          Alert.alert('Error', 'Job not found')
+          router.back()
+        }
+      } catch (error) {
+        console.error('❌ [JobDetails] Error in useEffect:', error)
+        Alert.alert('Error', 'Failed to load job details')
+        router.back()
+      } finally {
+        console.log('🔄 [JobDetails] Setting loading to false')
+        setLoading(false)
+      }
+    }
+    
+    fetchJobData()
+    console.log('🔄 [JobDetails] useEffect triggered - END')
+  }, [id])
 
-  // Mock job data - in a real app, this would come from an API based on the ID
+  // Cleanup timer on unmount
+  useEffect(() => {
+    console.log('🧹 [JobDetails] Setting up cleanup effect')
+    return () => {
+      console.log('🧹 [JobDetails] Cleanup: stopping timer')
+      stopTimer()
+    }
+  }, [])
+
+  const loadJobData = async () => {
+    try {
+      console.log('🔍 [JobDetails] Starting loadJobData for ID:', id)
+      console.log('🔍 [JobDetails] Setting loading to true')
+      setLoading(true)
+      
+      console.log('🔍 [JobDetails] About to call jobsService.getJobById')
+      const job = await jobsService.getJobById(id as string)
+      console.log('🔍 [JobDetails] getJobById returned:', job ? 'job data' : 'null')
+      
+      if (job) {
+        console.log('✅ [JobDetails] Job data received:', {
+          id: job.id,
+          service_name: job.service_name,
+          customer_name: job.customer_name,
+          service_address: job.service_address,
+          scheduled_date: job.scheduled_date,
+          scheduled_time: job.scheduled_time,
+          status: job.status,
+          final_amount: job.final_amount
+        })
+        
+        console.log('🔍 [JobDetails] Setting job data')
+        setJobData(job)
+        console.log('🔍 [JobDetails] Setting job status to:', job.status)
+        setJobStatus(job.status as JobDetails['status'])
+        console.log('✅ [JobDetails] Job data and status set successfully')
+      } else {
+        console.warn('⚠️ [JobDetails] Job not found - showing alert')
+        Alert.alert('Error', 'Job not found')
+        router.back()
+      }
+    } catch (error) {
+      console.error('❌ [JobDetails] Error loading job:', error)
+      console.error('❌ [JobDetails] Error details:', error.message || 'Unknown error')
+      Alert.alert('Error', 'Failed to load job details')
+      router.back()
+    } finally {
+      console.log('🔍 [JobDetails] Setting loading to false')
+      setLoading(false)
+      console.log('✅ [JobDetails] loadJobData completed')
+    }
+  }
+
+  // Helper function to get customer display name
+  const getCustomerName = (job: JobWithPayment): string => {
+    if (job.customer?.full_name) return job.customer.full_name
+    if (job.customer?.email) return job.customer.email
+    if (job.customer_name) return job.customer_name
+    return 'Unknown Customer'
+  }
+
+  // Helper function to format date
+  const formatJobDate = (dateString: string): string => {
+    return jobsService.formatDate(dateString)
+  }
+
+  // Helper function to format time range
+  const formatTimeRange = (startTime: string, endTime?: string): string => {
+    const formattedStart = jobsService.formatTime(startTime)
+    if (endTime) {
+      const formattedEnd = jobsService.formatTime(endTime)
+      return `${formattedStart} - ${formattedEnd}`
+    }
+    return formattedStart
+  }
+
+  // Show loading spinner while fetching data
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3b82f6" />
+          <Text style={styles.loadingText}>Loading job details...</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  // Show error if no job data
+  if (!jobData) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
+          <Text style={styles.errorTitle}>Job Not Found</Text>
+          <Text style={styles.errorText}>The requested job could not be found.</Text>
+          <TouchableOpacity style={styles.backToJobsButton} onPress={() => router.back()}>
+            <Text style={styles.backToJobsText}>Back to Jobs</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  // Transform job data to match UI expectations
   const jobDetails: JobDetails = {
-    id: id as string,
-    customerName: 'Erika Johnson',
-    serviceName: 'Moving Help',
-    customerImage: undefined, // Would be URL to customer image
-    address: '314 Oak St, Cincinnati, OH 45239',
-    date: 'January 24, 2024',
-    startTime: '8:00 am',
-    endTime: '11:30 am',
-    bedrooms: 3,
-    bathrooms: 2,
-    description: 'Need help moving furniture and boxes from a 3-bedroom apartment to a new house. Heavy lifting required.',
+    id: jobData.id,
+    customerName: getCustomerName(jobData),
+    serviceName: jobData.service_name || 'Service',
+    customerImage: undefined, // Could be added later
+    address: jobData.service_address || 'Address not available',
+    date: formatJobDate(jobData.scheduled_date),
+    startTime: jobsService.formatTime(jobData.scheduled_time),
+    endTime: '', // End time not available in current schema
+    bedrooms: undefined, // Not available in current schema
+    bathrooms: undefined, // Not available in current schema
+    description: jobData.notes || 'No description available',
     status: jobStatus,
     teamMembers: [
       {
         id: '1',
         name: 'You',
         isOnline: true,
-      },
-      {
-        id: '2',
-        name: 'Marcus Chen',
-        isOnline: true,
       }
     ],
-    price: 150
+    price: jobData.final_amount || 0
   }
 
   const handleAcceptJob = () => {
@@ -222,8 +374,6 @@ export default function JobDetailsScreen() {
 
       {/* Job Details */}
       <View style={styles.detailsSection}>
-        <Text style={styles.sectionTitle}>LOAD/UNLOAD</Text>
-        
         <View style={styles.detailItem}>
           <Text style={styles.detailAddress}>{jobDetails.address}</Text>
         </View>
@@ -238,15 +388,16 @@ export default function JobDetailsScreen() {
         <View style={styles.detailRow}>
           <View style={styles.detailItem}>
             <Text style={styles.detailLabel}>Time:</Text>
-            <Text style={styles.detailValue}>{jobDetails.startTime} - {jobDetails.endTime}</Text>
+            <Text style={styles.detailValue}>{jobDetails.startTime}</Text>
           </View>
         </View>
 
-        {jobDetails.bedrooms && jobDetails.bathrooms && (
+        {jobDetails.price > 0 && (
           <View style={styles.detailRow}>
-            <Text style={styles.detailValue}>
-              Bedrooms: {jobDetails.bedrooms}    Bathrooms: {jobDetails.bathrooms}
-            </Text>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Price:</Text>
+              <Text style={styles.detailValue}>{jobsService.formatCurrency(jobDetails.price)}</Text>
+            </View>
           </View>
         )}
       </View>
@@ -291,13 +442,6 @@ export default function JobDetailsScreen() {
   )
 
   const shouldShowChatTab = jobStatus === 'assigned' || jobStatus === 'in-progress'
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      stopTimer()
-    }
-  }, [])
 
   return (
     <SafeAreaView style={styles.container}>
@@ -754,5 +898,49 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#ffffff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  backToJobsButton: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  backToJobsText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 })
