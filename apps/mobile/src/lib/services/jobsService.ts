@@ -19,6 +19,17 @@ export interface JobsData {
   completed: JobWithPayment[]
 }
 
+export type JobState = 'available' | 'assigned' | 'in-progress' | 'completed'
+
+export interface JobStateInfo {
+  state: JobState
+  canAccept: boolean
+  canStart: boolean
+  canComplete: boolean
+  isAssignedToCurrentUser: boolean
+  isPastDue: boolean
+}
+
 class JobsService {
   // Helper function to get employee ID from profile ID
   private async getEmployeeIdFromProfile(profileId: string): Promise<string | null> {
@@ -206,6 +217,77 @@ class JobsService {
     } catch (error) {
       console.error('Error completing job:', error)
       throw error
+    }
+  }
+
+  /**
+   * Determine the robust state of a job based on assignment, dates, and current user context
+   */
+  async determineJobState(job: JobWithPayment, currentUserProfileId: string): Promise<JobStateInfo> {
+    try {
+      console.log('🎯 [JobsService] Determining job state for:', { jobId: job.id, currentUserProfileId })
+      
+      // Get current user's employee ID
+      const currentUserEmployeeId = await this.getEmployeeIdFromProfile(currentUserProfileId)
+      
+      // Check if job is assigned to current user
+      const isAssignedToCurrentUser = job.assigned_employee_id === currentUserEmployeeId
+      
+      // Check if job is past due (scheduled date/time has passed)
+      const now = new Date()
+      const jobDateTime = new Date(`${job.scheduled_date}T${job.scheduled_time}`)
+      const isPastDue = jobDateTime < now
+      
+      // Check if job is available for pickup (not assigned and not past due)
+      const isAvailableForPickup = !job.assigned_employee_id && !isPastDue && job.status !== 'completed' && job.status !== 'cancelled'
+      
+      let state: JobState
+      let canAccept = false
+      let canStart = false
+      let canComplete = false
+      
+      if (job.status === 'completed') {
+        state = 'completed'
+      } else if (job.status === 'cancelled') {
+        state = 'completed' // Treat cancelled as completed for UI purposes
+      } else if (isAvailableForPickup) {
+        state = 'available'
+        canAccept = true
+      } else if (isAssignedToCurrentUser) {
+        // For assigned jobs, we need to determine if they're in progress or just assigned
+        // Since we don't have a separate 'in-progress' status in the DB, we'll use 'assigned' for now
+        // and let the UI handle the transition to 'in-progress' locally
+        state = 'assigned'
+        canStart = !isPastDue
+        canComplete = true // Allow completion anytime if assigned to user
+      } else {
+        // Job is assigned to someone else or not available
+        state = 'assigned' // Show as assigned but no actions available
+      }
+      
+      const result: JobStateInfo = {
+        state,
+        canAccept,
+        canStart,
+        canComplete,
+        isAssignedToCurrentUser,
+        isPastDue
+      }
+      
+      console.log('✅ [JobsService] Job state determined:', result)
+      return result
+      
+    } catch (error) {
+      console.error('❌ [JobsService] Error determining job state:', error)
+      // Return safe defaults
+      return {
+        state: 'available',
+        canAccept: false,
+        canStart: false,
+        canComplete: false,
+        isAssignedToCurrentUser: false,
+        isPastDue: false
+      }
     }
   }
 

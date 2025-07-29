@@ -9,11 +9,15 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  Linking,
+  Platform,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams, router } from 'expo-router'
-import { jobsService, JobWithPayment } from '../../lib/services/jobsService'
+import MapView, { Marker } from 'react-native-maps'
+import { jobsService, JobWithPayment, JobStateInfo, JobState } from '../../lib/services/jobsService'
+import { supabase } from '../../lib/supabase'
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window')
 const isTablet = screenWidth >= 768
@@ -50,13 +54,44 @@ export default function JobDetailsScreen() {
   console.log('📝 [JobDetails] Route params:', { id, status, tab })
   
   const [activeTab, setActiveTab] = useState<TabType>('details')
-  const [jobStatus, setJobStatus] = useState<JobDetails['status']>(status as JobDetails['status'] || 'available')
+  const [jobStatus, setJobStatus] = useState<JobState>('available')
+  const [jobStateInfo, setJobStateInfo] = useState<JobStateInfo | null>(null)
+  const [currentUser, setCurrentUser] = useState<any>(null)
   const [timerStartTime, setTimerStartTime] = useState<Date | null>(null)
   const [elapsedTime, setElapsedTime] = useState(0) // in seconds
   const [loading, setLoading] = useState(true)
   const [jobData, setJobData] = useState<JobWithPayment | null>(null)
+  const [coordinates, setCoordinates] = useState({ latitude: 37.78825, longitude: -122.4324 }) // Default to SF
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   
+  // Define timer functions at the beginning
+  const startTimer = () => {
+    timerRef.current = setInterval(() => {
+      setElapsedTime(prev => prev + 1)
+    }, 1000)
+  }
+
+  const stopTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+  }
+
+  const formatElapsedTime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = seconds % 60
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ${secs}s`
+    } else if (minutes > 0) {
+      return `${minutes}m ${secs}s`
+    } else {
+      return `${secs}s`
+    }
+  }
+
   console.log('🎯 [JobDetails] Current state:', { loading, jobData: !!jobData, jobStatus })
   
   // Load job data from database - MOVED TO TOP
@@ -76,13 +111,37 @@ export default function JobDetailsScreen() {
         console.log('🔄 [JobDetails] Starting job fetch for ID:', id)
         setLoading(true)
         
+        // Get current user
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        if (userError || !user) {
+          console.error('❌ [JobDetails] User authentication error:', userError)
+          Alert.alert('Error', 'Please log in to view job details')
+          router.back()
+          return
+        }
+        setCurrentUser(user)
+        
         const job = await jobsService.getJobById(id as string)
         console.log('🔄 [JobDetails] Job fetch result:', job ? 'success' : 'null')
         
         if (job) {
           console.log('✅ [JobDetails] Setting job data and status')
+          console.log('🔍 [JobDetails] Job status from database:', job.status)
+          console.log('🔍 [JobDetails] Status param from route:', status)
           setJobData(job)
-          setJobStatus(job.status as JobDetails['status'])
+          
+          // Use robust job state determination
+          const stateInfo = await jobsService.determineJobState(job, user.id)
+          console.log('🎯 [JobDetails] Robust job state determined:', stateInfo)
+          
+          setJobStateInfo(stateInfo)
+          setJobStatus(stateInfo.state)
+          
+          // Geocode the job address to get coordinates
+          if (job.service_address) {
+            const coords = await geocodeAddress(job.service_address)
+            setCoordinates(coords)
+          }
         } else {
           console.warn('⚠️ [JobDetails] Job not found')
           Alert.alert('Error', 'Job not found')
@@ -102,14 +161,14 @@ export default function JobDetailsScreen() {
     console.log('🔄 [JobDetails] useEffect triggered - END')
   }, [id])
 
-  // Cleanup timer on unmount
+// Cleanup timer on unmount
   useEffect(() => {
     console.log('🧹 [JobDetails] Setting up cleanup effect')
     return () => {
       console.log('🧹 [JobDetails] Cleanup: stopping timer')
       stopTimer()
     }
-  }, [])
+  }, [stopTimer])
 
   const loadJobData = async () => {
     try {
@@ -176,6 +235,31 @@ export default function JobDetailsScreen() {
       return `${formattedStart} - ${formattedEnd}`
     }
     return formattedStart
+  }
+
+  // Geocoding function to get coordinates from address
+  const geocodeAddress = async (address: string) => {
+    try {
+      // For demo purposes, using a simple geocoding approach
+      // In production, you'd use Google Geocoding API or similar
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`
+      )
+      const data = await response.json()
+      
+      if (data && data.length > 0) {
+        const location = data[0]
+        return {
+          latitude: parseFloat(location.lat),
+          longitude: parseFloat(location.lon)
+        }
+      }
+    } catch (error) {
+      console.error('Geocoding error:', error)
+    }
+    
+    // Return default coordinates if geocoding fails
+    return { latitude: 37.78825, longitude: -122.4324 }
   }
 
   // Show loading spinner while fetching data
@@ -293,32 +377,6 @@ export default function JobDetailsScreen() {
     )
   }
 
-  const startTimer = () => {
-    timerRef.current = setInterval(() => {
-      setElapsedTime(prev => prev + 1)
-    }, 1000)
-  }
-
-  const stopTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
-  }
-
-  const formatElapsedTime = (seconds: number): string => {
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    const secs = seconds % 60
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m ${secs}s`
-    } else if (minutes > 0) {
-      return `${minutes}m ${secs}s`
-    } else {
-      return `${secs}s`
-    }
-  }
 
   const handleCall = () => {
     Alert.alert('Call', `Calling ${jobDetails.customerName}...`)
@@ -329,7 +387,15 @@ export default function JobDetailsScreen() {
   }
 
   const handleDirections = () => {
-    Alert.alert('Directions', `Opening directions to ${jobDetails.address}...`)
+    const address = encodeURIComponent(jobDetails.address)
+    const url = Platform.OS === 'ios'
+      ? `maps://app?daddr=${address}`
+      : `geo:0,0?q=${address}`
+    
+    Linking.openURL(url).catch(err => {
+      console.error('Error opening map:', err)
+      Alert.alert('Error', 'Could not open maps app')
+    })
   }
 
   const renderTaskDetails = () => (
@@ -358,14 +424,23 @@ export default function JobDetailsScreen() {
         </View>
       </View>
 
-      {/* Map Placeholder */}
+      {/* Map View */}
       <View style={styles.mapContainer}>
-        <View style={styles.mapPlaceholder}>
-          <Text style={styles.mapText}>Map View</Text>
-          <View style={styles.mapPin}>
-            <Ionicons name="location" size={24} color="#ffffff" />
-          </View>
-        </View>
+        <MapView
+          style={styles.map}
+          initialRegion={{
+            latitude: coordinates.latitude,
+            longitude: coordinates.longitude,
+            latitudeDelta: 0.0922,
+            longitudeDelta: 0.0421,
+          }}
+        >
+          <Marker
+            coordinate={coordinates}
+            title={jobDetails.serviceName}
+            description={jobDetails.address}
+          />
+        </MapView>
         <TouchableOpacity style={styles.directionsButton} onPress={handleDirections}>
           <Ionicons name="navigate" size={16} color="#3b82f6" />
           <Text style={styles.directionsText}>Directions</Text>
@@ -489,15 +564,15 @@ export default function JobDetailsScreen() {
         {activeTab === 'details' ? renderTaskDetails() : renderChat()}
       </View>
 
-      {/* Action Buttons */}
-      {jobStatus === 'available' && (
+      {/* Action Buttons - Using Robust State Logic */}
+      {jobStateInfo?.canAccept && (
         <View style={styles.footer}>
           <TouchableOpacity style={styles.acceptButton} onPress={handleAcceptJob}>
             <Text style={styles.acceptButtonText}>Accept Job</Text>
           </TouchableOpacity>
         </View>
       )}
-      {jobStatus === 'assigned' && (
+      {jobStateInfo?.canStart && jobStatus === 'assigned' && (
         <View style={styles.footer}>
           <TouchableOpacity style={styles.startButton} onPress={handleStartTask}>
             <Text style={styles.startButtonText}>Start Task</Text>
@@ -511,9 +586,18 @@ export default function JobDetailsScreen() {
               <Ionicons name="time" size={20} color="#ef4444" />
               <Text style={styles.timerDisplayText}>Time: {formatElapsedTime(elapsedTime)}</Text>
             </View>
-            <TouchableOpacity style={styles.endButton} onPress={handleEndJob}>
-              <Text style={styles.endButtonText}>End Job</Text>
-            </TouchableOpacity>
+            {jobStateInfo?.canComplete && (
+              <TouchableOpacity style={styles.endButton} onPress={handleEndJob}>
+                <Text style={styles.endButtonText}>End Job</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
+      {jobStateInfo?.isPastDue && jobStatus !== 'completed' && (
+        <View style={styles.footer}>
+          <View style={styles.pastDueContainer}>
+            <Text style={styles.pastDueText}>This job is past due</Text>
           </View>
         </View>
       )}
@@ -656,6 +740,9 @@ const styles = StyleSheet.create({
     borderRadius: isTablet ? 16 : 12,
     overflow: 'hidden',
     position: 'relative',
+  },
+  map: {
+    height: isTablet ? 300 : isSmallDevice ? 180 : 200,
   },
   mapPlaceholder: {
     height: isTablet ? 300 : isSmallDevice ? 180 : 200,
