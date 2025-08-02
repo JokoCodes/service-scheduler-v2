@@ -348,7 +348,10 @@ class ApiClient {
   }
 
   async getPayments(): Promise<any[]> {
+    console.log('🌐 API Client: Starting getPayments request')
+    console.log('🔑 Auth token present:', !!this.token)
     const response = await this.request<any[]>('/api/payments')
+    console.log('📋 API Client: getPayments response:', response)
     return response.data || []
   }
 }

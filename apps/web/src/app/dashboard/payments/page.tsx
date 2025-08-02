@@ -48,7 +48,7 @@ const PaymentsPage = () => {
     return {
       totalPayments: payments.length,
       pendingPayments,
-      totalRevenue: totalRevenue / 100, // Convert from cents to dollars
+      totalRevenue: totalRevenue, // Amount is already in dollars
       failedPayments
     };
   };
@@ -95,7 +95,7 @@ const PaymentsPage = () => {
               <div><strong>Payment ID:</strong> {selectedPayment.id}</div>
               <div><strong>Booking ID:</strong> {selectedPayment.bookingId}</div>
               <div><strong>Customer Email:</strong> {selectedPayment.customerEmail || 'N/A'}</div>
-              <div><strong>Amount:</strong> ${(selectedPayment.amount / 100).toFixed(2)}</div>
+              <div><strong>Amount:</strong> ${selectedPayment.amount.toFixed(2)}</div>
               <div><strong>Currency:</strong> {selectedPayment.currency}</div>
               <div><strong>Status:</strong> {selectedPayment.status}</div>
               <div><strong>Payment Method:</strong> {selectedPayment.paymentMethod || 'N/A'}</div>
@@ -218,7 +218,7 @@ const PaymentsPage = () => {
                     </div>
                     <div className="flex items-center space-x-2">
                       <div className="text-lg font-semibold text-gray-900">
-                        ${(payment.amount / 100).toFixed(2)}
+                        ${payment.amount.toFixed(2)}
                       </div>
                       <div className={`px-2 py-1 rounded-full text-xs font-medium ${
                         payment.status === 'succeeded' ? 'bg-green-100 text-green-800' :
